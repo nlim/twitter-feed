@@ -3,8 +3,14 @@ import scala.language.implicitConversions
 
 object Algebird {
 
-  val DELTA = 1E-8
-  val EPS = 0.001
+  // Delta and epsilon and uncertainty measures
+  // Sketches are within epsilon of the true value
+  // with probability 1 - delta
+  //
+  // Allows us to store histograms in sub-linear space.
+  //
+  val DELTA = 1E-4
+  val EPS = 0.01
   val SEED = 1
   val HEAVY_HITTERS_N = 10
 

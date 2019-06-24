@@ -4,7 +4,6 @@ import java.time.temporal.ChronoUnit
 
 import cats.Monoid
 import com.twitter.algebird.SketchMap
-import fs2.Chunk
 import io.circe._
 import io.circe.generic.auto._
 
@@ -29,6 +28,7 @@ final case class EmojiDefinition(name: Option[String], unified: String, short_na
 // Top domains of urls in tweets
 
 final case class StatsForDisplay(
+                                totalTweets: Long,
                                 averageTweetsPerHour: Long,
                                 averageTweetsPerMinute: Long,
                                 averageTweetsPerSecond: Long,
@@ -50,9 +50,10 @@ object StatsForDisplay {
     val secondsPassed = ChronoUnit.SECONDS.between(record.startTime, record.lastUpdatedTime)
 
     if (secondsPassed == 0L) {
-      StatsForDisplay(0, 0, 0, 0, 0, 0, List.empty, List.empty, List.empty)
+      StatsForDisplay(0, 0, 0, 0, 0, 0, 0, List.empty, List.empty, List.empty)
     } else {
       StatsForDisplay(
+        totalTweets = record.stats.totalTweetCount,
         averageTweetsPerHour = (60 * 60 * (record.stats.totalTweetCount.doubleValue() / secondsPassed)).round,
         averageTweetsPerMinute = (60 * (record.stats.totalTweetCount.doubleValue() / secondsPassed)).round,
         averageTweetsPerSecond = (record.stats.totalTweetCount.doubleValue() / secondsPassed).round,
@@ -67,7 +68,7 @@ object StatsForDisplay {
   }
 
   def topNKeys[K, V: Ordering](n: Int, m: Map[K, V], default: V): List[K] = {
-    m.keySet.toList.sortBy(k => m.getOrElse(k, default)).reverse.take(n)
+    m.keySet.toList.sortBy(k => m.getOrElse(k, default))(implicitly[Ordering[V]].reverse).take(n)
   }
 }
 
@@ -87,22 +88,16 @@ object StatsRecord {
     override def apply(a: Instant): Json = Json.fromLong(a.getEpochSecond)
   }
 
-  implicit val statsEncoder: Encoder[Stats] = implicitly[Encoder[Stats]]
-
-  implicit val encoder: Encoder[StatsRecord] = implicitly[Encoder[StatsRecord]]
-
-  implicit val monoid = Stats.monoid
-
-  def start(startTime: Instant) = new StatsRecord(startTime, startTime, Monoid.empty[Stats])
+  def start(startTime: Instant) = new StatsRecord(startTime, startTime, Stats.monoid.empty)
 
   def update(statsRecord: StatsRecord, lastUpdatedTime: Instant, stats: Stats) = statsRecord.copy(
     lastUpdatedTime = lastUpdatedTime,
-    stats = Monoid.combine(statsRecord.stats, stats)
+    stats = Stats.monoid.combine(statsRecord.stats, stats)
   )
 }
 
 object Stats {
-  implicit val monoid = new Monoid[Stats] {
+  val monoid = new Monoid[Stats] {
     override def empty: Stats = Stats(0, 0, 0, 0, Algebird.stringLongMonoid.zero, Algebird.stringLongMonoid.zero, Map.empty)
 
     override def combine(x: Stats, y: Stats): Stats = Stats(
@@ -132,7 +127,7 @@ object Tweet {
   val encoder: Encoder[Tweet] = implicitly[Encoder[Tweet]]
 
   def tweetsToStats(emojiMap: Map[Char, EmojiDefinition], tweets: Traversable[Tweet]): Stats = {
-    Monoid.combineAll(tweets.toList.map(t => tweetToStats(emojiMap, t)))
+    Stats.monoid.combineAll(tweets.toList.map(t => tweetToStats(emojiMap, t)))
   }
 
   def tweetToStats(emojiMap: Map[Char, EmojiDefinition], tweet: Tweet): Stats = {
@@ -164,7 +159,7 @@ object Tweet {
     )
   }
 
-  // Dealing with an exception throwing API, Lets just use Option to track failure for now.
+  // NOTE: Dealing with an exception throwing API, Lets just use Option to track failure for now.
   def toDomain(url: Url): Option[String] = {
     import scala.language.postfixOps
     Try {
@@ -178,39 +173,3 @@ object EmojiDefinition{
   val decoder: Decoder[EmojiDefinition] = implicitly[Decoder[EmojiDefinition]]
   val encoder: Encoder[EmojiDefinition] = implicitly[Encoder[EmojiDefinition]]
 }
-
-/*
-"entities": {
-  "hashtags": [],
-  "urls": [
-{
-  "url": "https://t.co/Rbc9TF2s5X",
-  "expanded_url": "https://twitter.com/i/web/status/1125490788736032770",
-  "display_url": "twitter.com/i/web/status/1…",
-  "indices": [
-  117,
-  140
-  ]
-}
-  ],
-  "user_mentions": [],
-  "symbols": []
-},
-
-{
-  "text" : "RT @T8oo_: homocelestial https://t.co/CQXzKTRDuV",
-  "entities" : {
-    "hashtags" : [
-    ],
-    "urls" : [
-    ],
-    "media" : [
-      {
-        "id" : 1140772619379236864,
-        "media_url" : "http://pbs.twimg.com/media/D9TWpzuXYAAX7qZ.jpg",
-        "type" : "photo"
-      }
-    ]
-  }
-}
-*/

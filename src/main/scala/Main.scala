@@ -1,5 +1,3 @@
-import java.io.{BufferedReader, File, FileReader}
-
 import cats.effect._
 import cats.effect.concurrent.Ref
 import cats.implicits._
