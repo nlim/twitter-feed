@@ -12,15 +12,11 @@ import fs2.Stream
 import fs2.text
 import java.nio.file.Paths
 import java.time.Instant
-
-import io.circe.{Encoder, Json, JsonObject}
 import org.http4s.circe._
 import io.circe.syntax._
 import io.circe.generic.auto._
-import pureconfig.ConfigReader.Result
 
 object Main extends IOApp {
-
 
   def run(args: List[String]): IO[ExitCode] = {
     getConfigAndRun { c =>
@@ -30,16 +26,16 @@ object Main extends IOApp {
         for {
           startInstant <- getCurrentInstant
           ref <- Ref.of[IO, StatsRecord](StatsRecord.start(startInstant))
-          _ <- IO.race(makeServer(emojiMap, ref), (new TWStream[IO](getCurrentInstant)).runWithRef(emojiMap, ref, c))
+          _ <- IO.race(makeServer(emojiMap, ref), (new TWStream[IO](getCurrentInstant)).run(emojiMap, ref, c))
         } yield ExitCode.Success
       }
     }
   }
 
-  implicit val emojiDefDecoder: io.circe.Decoder[EmojiDefinition] = EmojiDefinition.decoder
-  implicit val emojiListDecoder: io.circe.Decoder[List[EmojiDefinition]] = io.circe.Decoder.decodeList[EmojiDefinition]
+  implicit val emojiListDecoder: io.circe.Decoder[List[EmojiDefinition]] = io.circe.Decoder.decodeList[EmojiDefinition](EmojiDefinition.decoder)
 
   val emojiFileName = "src/main/resources/emoji.json"
+
   def getEmojiFile: IO[Either[io.circe.Error, List[EmojiDefinition]]] = {
     val s: Stream[IO, String] =  fs2.io.file.readAll[IO](Paths.get(emojiFileName), scala.concurrent.ExecutionContext.global, 4096).through(text.utf8Decode)
     val ioString: IO[String] = s.compile.toVector.map(v => v.mkString(""))
@@ -83,9 +79,7 @@ object Main extends IOApp {
     )
   }
 
-  def statsService(emojiMap: Map[Char, EmojiDefinition], ref: Ref[IO, StatsRecord]): HttpRoutes[IO] = HttpRoutes.of[IO](routes(emojiMap, ref))
-
-  def routes(emojiMap: Map[Char, EmojiDefinition], ref: Ref[IO, StatsRecord]): PartialFunction[Request[IO], IO[Response[IO]]] = {
+  def statsService(emojiMap: Map[Char, EmojiDefinition], ref: Ref[IO, StatsRecord]): HttpRoutes[IO] = HttpRoutes.of[IO] {
     case GET -> Root / "stats" =>
       val result = for {
         statsRecord <- ref.get
