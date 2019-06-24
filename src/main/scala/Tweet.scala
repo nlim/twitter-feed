@@ -17,16 +17,6 @@ final case class Tweet(text: String, entities: Option[Entities])
 
 final case class EmojiDefinition(name: Option[String], unified: String, short_name: String)
 
-// Average tweets per hour/minute/second
-
-// Total number of tweets received
-// Top emojis in tweets
-// Percent of tweets that contains emojis
-// Top hashtags
-// Percent of tweets that contain a url
-// Percent of tweets that contain a photo url (pic.twitter.com, pbs.twimg.com, or instagram)
-// Top domains of urls in tweets
-
 final case class StatsForDisplay(
                                 totalTweets: Long,
                                 averageTweetsPerHour: Long,

@@ -19,7 +19,7 @@ class TWStream[F[_]](getCurrentInstant: F[Instant])(implicit F: ConcurrentEffect
   // Use the Circe Json AST for in order to use parseJsonStream from jawn-fs2
   implicit val f = io.circe.jawn.CirceSupportParser.facade
 
-  // Used code from: https://http4s.org/v0.20/streaming/ to to the Oauth signing, and Obtaining the Json stream
+  // Used code from: https://http4s.org/v0.20/streaming/ to to the Oauth signing, and obtaining the Json stream in `jsonStream` function
   def signRequest(consumerKey: String, consumerSecret: String, accessToken: String, accessSecret: String)(req: Request[F]): F[Request[F]] = {
     val consumer = oauth1.Consumer(consumerKey, consumerSecret)
     val token    = oauth1.Token(accessToken, accessSecret)
@@ -49,20 +49,18 @@ class TWStream[F[_]](getCurrentInstant: F[Instant])(implicit F: ConcurrentEffect
 
   def twitterStream(c: TwitterFeedConfig): Stream[F, Tweet] = {
     val req = Request[F](Method.GET, Uri.uri("https://stream.twitter.com/1.1/statuses/sample.json"))
-    jsonStream(
-      c.consumerKey,
-      c.consumerSecret,
-      c.accessToken,
-      c.accessSecret
-    )(req)
+    jsonStream(c.consumerKey, c.consumerSecret, c.accessToken, c.accessSecret)(req)
   }
 
   def twitterStatsStream(config: TwitterFeedConfig, emojiMap: Map[Char, EmojiDefinition]): Stream[F, Stats] = {
     twitterStream(config).chunkN(10, true)
+      // Mapping to compute Stream[F, Stream[F, Stats]] for the Stream[F, Chunk[Tweet]]
       .map(c => Stream.eval(Applicative[F].pure(Tweet.tweetsToStats(emojiMap, c.toList))))
+      // Using parJoin in introduce some concurrency, so we compute Chunk[Tweet] => Stats in concurrently for each chunk
       .parJoin(4)
   }
 
+  // Cats Ref[F, T] modify function requires that you return a 2-tuple
   def modifyFunction(instant: Instant, stats: Stats)(statsRecord: StatsRecord): (StatsRecord, StatsRecord) = {
     val result = StatsRecord.update(statsRecord, instant, stats)
     (result, result)
