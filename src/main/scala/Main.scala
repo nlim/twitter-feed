@@ -80,15 +80,11 @@ object Main extends IOApp {
 
   def statsService(emojiMap: Map[Char, EmojiDefinition], ref: Ref[IO, StatsRecord]): HttpRoutes[IO] = HttpRoutes.of[IO] {
     case GET -> Root / "stats" =>
-      val result = for {
+      for {
         statsRecord <- ref.get
         statsForDisplay: StatsForDisplay = StatsForDisplay.compute(statsRecord, emojiMap)
         r <- Ok(StatsForDisplay.encoder(statsForDisplay))
       } yield r
-
-      result.handleErrorWith(f => {
-        printErrLn(f.getStackTrace().mkString("\n")) >> Ok("error")
-      })
   }
 
   def makeServer(emojiMap: Map[Char, EmojiDefinition], ref: Ref[IO, StatsRecord]): IO[Unit] = {
