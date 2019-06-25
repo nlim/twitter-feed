@@ -15,9 +15,13 @@ import cats.effect.concurrent.Ref
 
 import scala.concurrent.ExecutionContext.global
 
-class TWStream[F[_]](getCurrentInstant: F[Instant])(implicit F: ConcurrentEffect[F], cs: ContextShift[F], timer: Timer[F]) {
+// Took inspiration for this class from: https://http4s.org/v0.20/streaming/
+// Lets you program to a generic F type constructor, IO is the only one used in this project right now.
+class TwitterStream[F[_]](getCurrentInstant: F[Instant])(implicit F: ConcurrentEffect[F], cs: ContextShift[F], timer: Timer[F]) {
   // Use the Circe Json AST for in order to use parseJsonStream from jawn-fs2
   implicit val f = io.circe.jawn.CirceSupportParser.facade
+  implicit val decoder = Tweet.decoder
+  implicit val encoder = Tweet.encoder
 
   // Used code from: https://http4s.org/v0.20/streaming/ to to the Oauth signing, and obtaining the Json stream in `jsonStream` function
   def signRequest(consumerKey: String, consumerSecret: String, accessToken: String, accessSecret: String)(req: Request[F]): F[Request[F]] = {
@@ -26,8 +30,6 @@ class TWStream[F[_]](getCurrentInstant: F[Instant])(implicit F: ConcurrentEffect
     oauth1.signRequest(req, consumer, callback = None, verifier = None, token = Some(token))
   }
 
-  implicit val decoder = Tweet.decoder
-  implicit val encoder = Tweet.encoder
 
   def jsonStream(consumerKey: String, consumerSecret: String, accessToken: String, accessSecret: String)(req: Request[F]): Stream[F, Tweet] = {
     for {
@@ -40,16 +42,16 @@ class TWStream[F[_]](getCurrentInstant: F[Instant])(implicit F: ConcurrentEffect
     } yield tweet
   }
 
+  def twitterStream(c: TwitterFeedConfig): Stream[F, Tweet] = {
+    val req = Request[F](Method.GET, Uri.uri("https://stream.twitter.com/1.1/statuses/sample.json"))
+    jsonStream(c.consumerKey, c.consumerSecret, c.accessToken, c.accessSecret)(req)
+  }
+
   def resultToStream[A](result: Result[A]): Stream[F, A] = {
     result match {
       case Left(_) =>  Stream.empty
       case Right(a) => Stream(a)
     }
-  }
-
-  def twitterStream(c: TwitterFeedConfig): Stream[F, Tweet] = {
-    val req = Request[F](Method.GET, Uri.uri("https://stream.twitter.com/1.1/statuses/sample.json"))
-    jsonStream(c.consumerKey, c.consumerSecret, c.accessToken, c.accessSecret)(req)
   }
 
   def twitterStatsStream(config: TwitterFeedConfig, emojiMap: Map[Char, EmojiDefinition]): Stream[F, Stats] = {

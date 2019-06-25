@@ -13,6 +13,7 @@ import java.time.Instant
 import org.http4s.circe._
 import io.circe.syntax._
 import io.circe.generic.auto._
+import io.circe.parser.decode
 
 object Main extends IOApp {
 
@@ -24,7 +25,7 @@ object Main extends IOApp {
         for {
           startInstant <- getCurrentInstant
           ref <- Ref.of[IO, StatsRecord](StatsRecord.start(startInstant))
-          _ <- IO.race(makeServer(emojiMap, ref), (new TWStream[IO](getCurrentInstant)).run(emojiMap, ref, c))
+          _ <- IO.race(makeServer(emojiMap, ref), (new TwitterStream[IO](getCurrentInstant)).run(emojiMap, ref, c))
         } yield ExitCode.Success
       }
     }
@@ -39,7 +40,7 @@ object Main extends IOApp {
     val ioString: IO[String] = s.compile.toVector.map(v => v.mkString(""))
 
     ioString.map(string =>
-      io.circe.parser.decode[List[EmojiDefinition]](string)
+      decode[List[EmojiDefinition]](string)
     )
   }
 
